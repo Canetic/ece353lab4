@@ -1,0 +1,90 @@
+module receiver( 
+		rxd0,
+		clk, 
+		rst_n, 
+		LED_out );
+
+	input rxd0;
+	input clk;
+	input rst_n;
+	output [7:0] LED_out;
+
+	wire rxd1;
+	wire rxd2;
+	wire rxd3;
+	wire rxd4;
+	wire clk32;
+	assign LED_out[0] = clk32;
+	assign LED_out[1] = rxd1;
+
+	sampler4M s (clk, rst_n, rxd0, rxd1);
+	prescaler p (clk, rst_n, clk32);
+	shift_reg sreg1(clk32, rxd1, rxd2);
+	shift_reg sreg2(clk32, rxd2, rxd3);
+	shift_reg sreg3(clk32, rxd3, rxd4);
+	
+	
+endmodule
+
+module sampler4M(clk, rst, rxd0, rxd1);
+input clk;
+input rst;
+input rxd0;
+output rxd1;
+
+reg a;
+assign rxd1 = a;
+
+always @(posedge clk) begin
+	if(!rst) begin
+		a <= 0;
+	end else begin
+		a <= rxd0;
+	end
+end
+endmodule
+
+module shift_reg(clk, data_in, data_out);
+input clk;
+input data_in;
+output data_out;
+
+reg[9:0] sr;
+assign data_out = sr[0];
+
+always @(posedge clk) begin
+	sr[9] <= data_in;
+	sr[8] <= sr[9];
+	sr[7] <= sr[8];
+	sr[6] <= sr[7];
+	sr[5] <= sr[6];
+	sr[4] <= sr[5];
+	sr[3] <= sr[4];
+	sr[2] <= sr[3];
+	sr[1] <= sr[2];
+	sr[0] <= sr[1];
+end
+endmodule
+
+module prescaler(clk_in, rst_in, clk_out);
+	input clk_in;
+	input rst_in;
+	output clk_out;
+
+	reg[6:0] cnt;
+	wire[6:0] cnt_nxt;
+	assign clk_out = cnt[6];   //count div by 8
+	assign cnt_nxt = cnt + 1'b1;
+	
+	
+
+	always @(posedge clk_in) begin
+		if (!rst_in) begin
+			cnt <= 21'b0;
+		end
+		else begin
+			cnt <= cnt_nxt;
+		end
+	end
+
+endmodule
