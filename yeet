@@ -2,7 +2,7 @@ module receiver(
 		rxd0,
 		clk, 
 		rst_n, 
-		LED_out );
+		LED_out,);
 
 	input rxd0;
 	input clk;
@@ -14,78 +14,134 @@ module receiver(
 	wire rxd3;
 	wire rxd4;
 	wire clk32;
-	wire test;
-	assign LED_out[2] = test;
-	assign LED_out[0] = clk32;
-	assign LED_out[1] = rxd1;
+	wire pre_state;
+	wire[7:0] note_id0;
+	wire[7:0] note_id1;
+	wire[7:0] note_on;
+	
+	assign LED_out[0] = note_id1[0] & LED_en;
+	assign LED_out[1] = note_id1[1] & LED_en;
+	assign LED_out[2] = note_id1[2] & LED_en;
+	assign LED_out[3] = note_id1[3] & LED_en;
+	assign LED_out[4] = note_id1[4] & LED_en;
+	assign LED_out[5] = note_id1[5] & LED_en;
+	assign LED_out[6] = note_id1[6] & LED_en;
+	assign LED_out[7] = note_id1[7] & LED_en;
 
 	sampler4M s (clk, rst_n, rxd0, rxd1);
-	prescaler p (clk, rst_n, rxd1, clk32, test);
+	prescaler p (clk, rst_n, rxd1, clk32, pre_state);
 	shift_reg sreg1(clk32, rxd1, rxd2);
-	shift_reg sreg2(clk32, rxd2, rxd3);
-	shift_reg sreg3(clk32, rxd3, rxd4);
-	
+	shift_reg sreg2(clk32, rxd2, rxd3, note_id0);
+	shift_reg sreg3(clk32, rxd3, rxd4, note_on);
+	buff_reg breg(clk, rst_n, pre_state, note_id0, note_id1);
+	display_EN out_en(clk, rst_n, pre_state, note_on, LED_en);
 	
 endmodule
 
 module sampler4M(clk, rst, rxd0, rxd1);
-input clk;
-input rst;
-input rxd0;
-output rxd1;
+	input clk;
+	input rst;
+	input rxd0;
+	output rxd1;
 
-reg a;
-assign rxd1 = a;
+	reg a;
+	assign rxd1 = a;
 
-always @(posedge clk) begin
-	if(!rst) begin
-		a <= 1'b1;
-	end else begin
-		a <= rxd0;
+	always @(posedge clk) begin
+		if(!rst) begin
+			a <= 1'b1;
+		end else begin
+			a <= rxd0;
+		end
 	end
-end
 endmodule
 
-module shift_reg(clk, data_in, data_out);
-input clk;
-input data_in;
-output data_out;
+module shift_reg(clk, data_in, data_out, out);
+	input clk;
+	input data_in;
+	output data_out;
+	output[7:0] out;
 
-reg[9:0] sr;
-assign data_out = sr[0];
+	assign out = sr[8:1];
 
-always @(posedge clk) begin
-	sr[9] <= data_in;
-	sr[8] <= sr[9];
-	sr[7] <= sr[8];
-	sr[6] <= sr[7];
-	sr[5] <= sr[6];
-	sr[4] <= sr[5];
-	sr[3] <= sr[4];
-	sr[2] <= sr[3];
-	sr[1] <= sr[2];
-	sr[0] <= sr[1];
-end
+	reg[9:0] sr;
+	assign data_out = sr[0];
+
+	always @(posedge clk) begin
+		sr[9] <= data_in;
+		sr[8] <= sr[9];
+		sr[7] <= sr[8];
+		sr[6] <= sr[7];
+		sr[5] <= sr[6];
+		sr[4] <= sr[5];
+		sr[3] <= sr[4];
+		sr[2] <= sr[3];
+		sr[1] <= sr[2];
+		sr[0] <= sr[1];
+	end
 endmodule
 
-module prescaler(clk_in, rst_in, rxd1, clk_out, test);
+module buff_reg(clk, rst, pre_state, read, write);
+	input clk;
+	input rst;
+	input pre_state;
+	input[7:0] read;
+	output[7:0] write;
+
+	reg[7:0] r;
+	assign write = r;
+
+	always @(*) begin
+		if (pre_state == 1) begin
+			r = read;
+		end
+		if (!rst) begin
+			r = 8'b0;
+		end
+	end
+	
+endmodule
+
+module display_EN(clk, rst, pre_state, read, LED_EN);
+	input clk;
+	input rst;
+	input pre_state;
+	input[7:0] read;
+	output LED_EN;
+	
+	reg en;
+	
+	assign LED_EN = en;
+	
+	always @(*) begin
+		if (((read[7:4] == 4'b1001))&pre_state) begin
+			en = 1'b1;
+		end
+		if (((read[7:4] == 4'b1000))&pre_state) begin
+			en = 1'b0;
+		end
+		if (!rst) begin
+			en = 1'b0;
+		end
+	end
+endmodule
+
+module prescaler(clk_in, rst_in, rxd1, clk_out, stop);
 	input clk_in;
 	input rst_in;
 	input rxd1;
 	output clk_out;
-	output test;
+	output stop;
 
 	reg[11:0] cnt;
 	reg state;
 	wire[11:0] cnt_nxt;
 	wire state_nxt;
+	assign state_out = state;
 	assign clk_out = cnt[6];   //count div by 6
 	
-	
-	wire stop;
-	assign test = &(cnt[11:8] & (4'b1111));
 	assign stop = &(cnt[11:8] & (4'b1111));
-	assign state_nxt = (state || ~(rxd1))&&~stop;//&& (cyc_cnt[4:0] && 5'b11111);
+	assign state_nxt = (state || ~(rxd1))&&~stop;
 	assign cnt_nxt = (cnt + 1'b1)*state;
 
 	always @(posedge clk_in) begin
