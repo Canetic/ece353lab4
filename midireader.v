@@ -5,7 +5,6 @@ module midireader(midi_in, rst_n, clk, LED_out);
 	
 	reg 	rxb;			//recieve bit
 	wire	[7:0] buffer;	//buffer connection between reciever and fsm
-	wire	[7:0] out;		//output to LEDs
 	
 	assign	LED_out = buffer;
 	
