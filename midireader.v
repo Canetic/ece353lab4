@@ -1,3 +1,8 @@
+/*
+ *midireader.v
+ *Contributors: Angus Mo, Timothy Shum, O-Dom Pin, Karl Shao
+ */
+
 module midireader(midi_in, rst_n, clk, LED_out);
 	
 	input	midi_in, rst_n, clk;
@@ -111,6 +116,88 @@ module reciever(clk, rst_n, rxb, data);
 	
 endmodule
 
+module fsm(clk, rst_n, buffer, LED_out);
+	
+	input 	clk, rst_n; 
+	input	[7:0] buffer;
+	output	[7:0] LED_out;
+
+	reg		en, clr;				//enable and clear settings for the memory
+	reg 	[1:0] state, state_nxt;
+	wire	[7:0] out;				//output to the LEDs
+
+	assign LED_out = out;
+	
+	//memory latches to store the note byte
+	memory		MEM0(buffer, en, clr, out);
+	
+	always @(posedge clk) begin
+		if(!rst_n) begin
+			state <= 2'b0;
+		end
+		else begin
+			state <= state_nxt;
+		end
+	end
+
+	always @(*) begin
+		en = 1'b0;
+		clr = 1'b0;
+		case(state)
+		//poll for the start byte
+			2'b00: begin
+				en = 1'b1;
+				clr = 1'b1;
+				if(buffer[7:4] == 4'h9) begin
+					state_nxt = 2'b01;
+				end
+				else begin
+					state_nxt = 2'b00;
+				end
+			end
+		//wait until the note byte is recieved
+			2'b01: begin
+				en = 1'b1;
+				if(buffer[7:4] == 4'h9) begin
+					state_nxt = 2'b01;
+					clr = 1'b1;
+				end
+				else begin
+					state_nxt = 2'b10;
+					clr = 1'b0;
+				end
+			end
+		//display the note until the off byte is recieved
+			2'b10: begin
+				if(buffer[7:4] == 4'h8) begin
+					state_nxt = 2'b11;
+				end
+				else begin
+					if(buffer[7:4] == 4'h9) begin
+						state_nxt = 2'b01;
+					end
+					else begin
+						state_nxt = 2'b10;
+					end
+				end
+			end
+		//keep displaying the note until after the note message is recieved
+			2'b11: begin
+				if(buffer[7:4] == 4'h8) begin
+					state_nxt = 2'b11;
+				end
+				else begin
+					state_nxt = 2'b00;
+				end
+			end
+			default: begin
+				state_nxt = 2'b0;
+			end
+		endcase
+	end
+
+endmodule
+
 module shiftReg(clk, rst_n, rxb, data);
 	
 	input 	clk, rst_n, rxb;
@@ -177,4 +264,27 @@ module counter(clk, rst_n, cnt_nxt, cnt_out);
 			cnt <= cnt_nxt;
 		end
 	end
+endmodule
+
+//memory to store data in latches
+module memory(data_in, en, clr, out);
+
+	input	en, clr;
+	input	[7:0] data_in;
+	output	[7:0] out;
+
+	wire	[7:0] Q;
+	
+	assign	out = Q;
+	
+	//instantiate a latch for each bit, disable preset
+	dlatch	D7(data_in[7], en, ~clr, 1'b1, Q[7]);
+	dlatch	D6(data_in[6], en, ~clr, 1'b1, Q[6]);
+	dlatch	D5(data_in[5], en, ~clr, 1'b1, Q[5]);
+	dlatch	D4(data_in[4], en, ~clr, 1'b1, Q[4]);
+	dlatch	D3(data_in[3], en, ~clr, 1'b1, Q[3]);
+	dlatch	D2(data_in[2], en, ~clr, 1'b1, Q[2]);
+	dlatch	D1(data_in[1], en, ~clr, 1'b1, Q[1]);
+	dlatch	D0(data_in[0], en, ~clr, 1'b1, Q[0]);
+	
 endmodule
