@@ -6,14 +6,17 @@
 module midireader(midi_in, rst_n, clk, LED_out);
 	
 	input	midi_in, rst_n, clk;
-	output 	[7:0] LED_out, out_test;
+	output 	[7:0] LED_out;
 	
 	reg 	rxb;			//recieve bit
 	wire	[7:0] buffer;	//buffer connection between reciever and fsm
+	wire	[7:0] out;		//output to LEDs
 	
-	assign	LED_out = buffer;
+	assign	LED_out = out;
 	
 	reciever	RXC(.clk(clk), .rst_n(rst_n), .rxb(rxb), .data(buffer));
+	fsm			LED_FSM(.clk(clk), .rst_n(rst_n), .buffer(buffer), .LED_out(out));
+	
 	
 	//poll midi input
 	always @(posedge clk) begin
