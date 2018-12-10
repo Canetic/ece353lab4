@@ -38,9 +38,8 @@ module reciever(clk, rst_n, rxb, data);
 	
 	wire	[11:0] cnt;				//counter for midi bits and timer
 	reg		[11:0] cnt_nxt;
-	reg		[1:0] state, state_nxt;
-	wire	[7:0] buffer;			//buffer holds midi bytes
-	reg		[7:0] buffer_in;		//input to the buffer registers
+	reg		[1:0] state, state_nxt;	//state registers to hold state
+	reg		[7:0] buffer;			//output from the reciever
 	reg		data_in;				//input to the shift registers
 	wire	[7:0] out;				//output from the shift registers
 	
@@ -48,7 +47,6 @@ module reciever(clk, rst_n, rxb, data);
 
 	counter		TCNT0(.clk(clk), .rst_n(rst_n), .cnt_nxt(cnt_nxt), .cnt_out(cnt));
 	shiftReg	SR0(.clk(clk), .rst_n(rst_n), .rxb(data_in), .data(out));
-	bufferReg	DATA_REG0(.clk(clk), .rst_n(rst_n), .data_in(buffer_in), .data(buffer));
 	
 	always @(posedge clk) begin
 		if(!rst_n) begin
@@ -60,10 +58,10 @@ module reciever(clk, rst_n, rxb, data);
 	end
 
 	always @(*) begin
-		buffer_in = buffer;
-		data_in = out[0];
-		cnt_nxt[7:0] = cnt[7:0] + 1'b1;
-		cnt_nxt[11:8] = cnt[11:8];
+		buffer = 8'b0;					//initial output
+		data_in = out[0];				//loop shift registers
+		cnt_nxt[7:0] = cnt[7:0] + 1'b1;	//define next count
+		cnt_nxt[11:8] = cnt[11:8];		//hold the byte count
 		case(state)
 		//poll the start bit
 			2'b0: begin
@@ -105,14 +103,14 @@ module reciever(clk, rst_n, rxb, data);
 				else begin
 					state_nxt = 2'b00;
 					cnt_nxt = 12'b0;
-					buffer_in = out;
+					buffer = out;
 				end
 			end
 			default: begin
 				state_nxt = 2'b00;
 				cnt_nxt = 12'b0;
 				data_in = out[0];
-				buffer_in = 8'b0;
+				buffer = 8'b0;
 			end
 		endcase
 	end
@@ -125,14 +123,14 @@ module fsm(clk, rst_n, buffer, LED_out);
 	input	[7:0] buffer;
 	output	[7:0] LED_out;
 
-	reg		en, clr;				//enable and clear settings for the memory
-	reg 	[1:0] state, state_nxt;
+	reg		[7:0] buffer_in;		//input to the memory
+	reg 	[1:0] state, state_nxt;	//state register to hold state
 	wire	[7:0] out;				//output to the LEDs
 
 	assign LED_out = out;
 	
-	//memory latches to store the note byte
-	memory		MEM0(buffer, en, clr, out);
+	//memory registers to store the note byte
+	memory	MEM0(clk, rst_n, buffer_in, out);
 	
 	always @(posedge clk) begin
 		if(!rst_n) begin
@@ -144,13 +142,10 @@ module fsm(clk, rst_n, buffer, LED_out);
 	end
 
 	always @(*) begin
-		en = 1'b0;
-		clr = 1'b0;
+		buffer_in = 8'b0;;
 		case(state)
 		//poll for the start byte
 			2'b00: begin
-				en = 1'b1;
-				clr = 1'b1;
 				if(buffer[7:4] == 4'h9) begin
 					state_nxt = 2'b01;
 				end
@@ -160,18 +155,17 @@ module fsm(clk, rst_n, buffer, LED_out);
 			end
 		//wait until the note byte is recieved
 			2'b01: begin
-				en = 1'b1;
-				if(buffer[7:4] == 4'h9) begin
+				if(buffer == 8'b0) begin
 					state_nxt = 2'b01;
-					clr = 1'b1;
 				end
 				else begin
 					state_nxt = 2'b10;
-					clr = 1'b0;
+					buffer_in = buffer;
 				end
 			end
 		//display the note until the off byte is recieved
 			2'b10: begin
+				buffer_in = out;
 				if(buffer[7:4] == 4'h8) begin
 					state_nxt = 2'b11;
 				end
@@ -186,8 +180,9 @@ module fsm(clk, rst_n, buffer, LED_out);
 			end
 		//keep displaying the note until after the note message is recieved
 			2'b11: begin
-				if(buffer[7:4] == 4'h8) begin
+				if(buffer == 8'b0) begin
 					state_nxt = 2'b11;
+					buffer_in = out;
 				end
 				else begin
 					state_nxt = 2'b00;
@@ -201,6 +196,7 @@ module fsm(clk, rst_n, buffer, LED_out);
 
 endmodule
 
+//shift register to store the serial midi input
 module shiftReg(clk, rst_n, rxb, data);
 	
 	input 	clk, rst_n, rxb;
@@ -228,7 +224,8 @@ module shiftReg(clk, rst_n, rxb, data);
 	
 endmodule
 
-module bufferReg(clk, rst_n, data_in, data);
+//memory registers to store the note byte
+module memory(clk, rst_n, data_in, data);
 	
 	input 	clk, rst_n;
 	input	[7:0] data_in;
@@ -267,27 +264,4 @@ module counter(clk, rst_n, cnt_nxt, cnt_out);
 			cnt <= cnt_nxt;
 		end
 	end
-endmodule
-
-//memory to store data in latches
-module memory(data_in, en, clr, out);
-
-	input	en, clr;
-	input	[7:0] data_in;
-	output	[7:0] out;
-
-	wire	[7:0] Q;
-	
-	assign	out = Q;
-	
-	//instantiate a latch for each bit, disable preset
-	dlatch	D7(data_in[7], en, ~clr, 1'b1, Q[7]);
-	dlatch	D6(data_in[6], en, ~clr, 1'b1, Q[6]);
-	dlatch	D5(data_in[5], en, ~clr, 1'b1, Q[5]);
-	dlatch	D4(data_in[4], en, ~clr, 1'b1, Q[4]);
-	dlatch	D3(data_in[3], en, ~clr, 1'b1, Q[3]);
-	dlatch	D2(data_in[2], en, ~clr, 1'b1, Q[2]);
-	dlatch	D1(data_in[1], en, ~clr, 1'b1, Q[1]);
-	dlatch	D0(data_in[0], en, ~clr, 1'b1, Q[0]);
-	
 endmodule
