@@ -14,7 +14,7 @@ module midireader(midi_in, rst_n, clk, LED_out);
 	
 	assign	LED_out = out;
 	
-	reciever	RXC(.clk(clk), .rst_n(rst_n), .rxb(rxb), .data(buffer));
+	receiver	RXC(.clk(clk), .rst_n(rst_n), .rxb(rxb), .data(buffer));
 	fsm			LED_FSM(.clk(clk), .rst_n(rst_n), .buffer(buffer), .LED_out(out));
 	
 	
@@ -30,8 +30,8 @@ module midireader(midi_in, rst_n, clk, LED_out);
 	
 endmodule
 
-//recieves and moves midi messages into registers
-module reciever(clk, rst_n, rxb, data);
+//receives and moves midi messages into registers
+module receiver(clk, rst_n, rxb, data);
 
 	input 	clk, rst_n, rxb;
 	output	[7:0] data;
