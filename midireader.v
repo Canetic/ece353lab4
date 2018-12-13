@@ -8,23 +8,25 @@ module midireader(midi_in, rst_n, clk, LED_out);
 	input	midi_in, rst_n, clk;
 	output 	[7:0] LED_out;
 	
-	reg 	rxb;			//recieve bit
+	reg 	rxb0, rxb1;		//recieve bit registers
 	wire	[7:0] buffer;	//buffer connection between reciever and fsm
 	wire	[7:0] out;		//output to LEDs
 	
 	assign	LED_out = out;
 	
-	receiver	RXC(.clk(clk), .rst_n(rst_n), .rxb(rxb), .data(buffer));
+	receiver	RXC(.clk(clk), .rst_n(rst_n), .rxb(rxb1), .data(buffer));
 	fsm			LED_FSM(.clk(clk), .rst_n(rst_n), .buffer(buffer), .LED_out(out));
 	
 	
-	//poll midi input
+	//poll midi input using 2 registers to prevent metastablity
 	always @(posedge clk) begin
 		if(!rst_n) begin
-			rxb <= 1'b1;
+			rxb0 <= 1'b1;
+			rxb1 <= 1'b1;
 		end
 		else begin
-			rxb <= midi_in;
+			rxb0 <= midi_in;
+			rxb1 <= rxb0;
 		end
 	end
 	
